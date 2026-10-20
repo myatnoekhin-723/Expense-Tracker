@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Expense Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Libraries (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <!-- ===== Header ===== -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">💰</span>
+      <div>
+        <h1>My Expense Tracker</h1>
+        <p class="subtitle">Every Kyat counts ✨</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="hbtn" id="btnImport" title="Import my Excel file">📥 <span>Import Excel</span></button>
+      <button class="hbtn" id="btnExport" title="Export all data to Excel">📤 <span>Export Excel</span></button>
+      <button class="hbtn" id="btnBackup" title="Download a JSON backup">💾 <span>Backup</span></button>
+      <button class="hbtn" id="btnRestore" title="Restore from a JSON backup">♻️ <span>Restore</span></button>
+      <button class="hbtn" id="btnSettings" title="Google Sheets sync settings">⚙️ <span>Settings</span></button>
+      <button class="hbtn icon" id="btnTheme" title="Toggle dark / light mode">🌙</button>
+      <input type="file" id="fileExcel" accept=".xlsx,.xls" hidden>
+      <input type="file" id="fileJson" accept=".json,application/json" hidden>
+    </div>
+    <!-- Google Sheets sync status -->
+    <div class="sync-bar" id="syncBar">
+      <span class="sync-pill" id="syncPill">☁️ Sync off</span>
+      <span class="sync-text" id="syncText"></span>
+      <span class="pending-badge" id="pendingBadge" hidden></span>
+      <button class="hbtn small" id="btnSync" type="button">🔄 Sync</button>
+      <span class="sync-msg" id="syncMsg" hidden></span>
+    </div>
+  </header>
+
+  <!-- Sample data notice -->
+  <div class="sample-banner" id="sampleBanner" hidden>
+    <span>👋 You're looking at <b>sample data</b> so the dashboard isn't empty.</span>
+    <button class="btn small light" id="btnClearSample">🧹 Clear sample data</button>
+  </div>
+
+  <!-- ===== Tabs ===== -->
+  <nav class="tabs" role="tablist">
+    <button class="tab" data-tab="expenses" role="tab">🧾 <span>Expenses</span></button>
+    <button class="tab" data-tab="dashboard" role="tab">📊 <span>Dashboard</span></button>
+    <button class="tab" data-tab="income" role="tab">💵 <span>Income</span></button>
+  </nav>
+
+  <main>
+    <!-- ===== Tab 1: Expenses ===== -->
+    <section class="tab-panel" id="tab-expenses" hidden>
+      <form class="card form-card" id="expenseForm" novalidate>
+        <h2 id="expFormTitle">➕ Quick add expense</h2>
+        <div class="form-grid">
+          <label>Date
+            <input type="date" id="expDate" required>
+          </label>
+          <label>Category
+            <select id="expCategory"></select>
+          </label>
+          <label class="grow">Item name
+            <input type="text" id="expItem" placeholder="e.g. Mohinga breakfast" list="itemSuggestions" autocomplete="off" maxlength="80">
+          </label>
+          <label>Amount (Ks)
+            <input type="number" id="expAmount" min="1" step="1" inputmode="numeric" placeholder="0">
+          </label>
+          <div class="form-buttons">
+            <button type="submit" class="btn primary" id="expSubmit">➕ Add</button>
+            <button type="button" class="btn ghost" id="expCancel" hidden>Cancel</button>
+          </div>
+        </div>
+        <p class="form-error" id="expError" role="alert"></p>
+      </form>
+      <datalist id="itemSuggestions"></datalist>
+
+      <div class="card">
+        <div class="toolbar">
+          <input type="search" id="expSearch" placeholder="🔍 Search item name…">
+          <input type="month" id="expMonth" title="Filter by month">
+          <select id="expCatFilter" title="Filter by category"></select>
+          <button type="button" class="btn ghost small" id="expResetFilters">↺ Reset</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="expTable">
+            <thead><tr><th>Date</th><th>Category</th><th>Item</th><th class="num">Amount (Ks)</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="expCount"></span>
+          <strong id="expTotal"></strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Tab 2: Monthly Dashboard ===== -->
+    <section class="tab-panel" id="tab-dashboard" hidden>
+      <div class="card dash-controls">
+        <div class="month-nav">
+          <button type="button" class="btn ghost icon-only" id="dashPrev" title="Previous month">‹</button>
+          <input type="month" id="dashMonth">
+          <button type="button" class="btn ghost icon-only" id="dashNext" title="Next month">›</button>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="yearToggle">
+          <span class="slider"></span>
+          <span>Year overview</span>
+        </label>
+        <span class="period-pill">📅 <span class="period-label"></span></span>
+      </div>
+
+      <div class="stats" id="statCards"></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>🍩 Category share · <span class="period-label"></span></h3>
+          <div class="chart-box"><canvas id="chartDonut"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>💡 Insights</h3>
+          <div id="insights" class="insights"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>⚖️ Income vs Expense</h3>
+          <div class="chart-box"><canvas id="chartIncExp"></canvas></div>
+        </div>
+        <div class="card">
+          <h3 id="dailyTitle">📈 Daily spending</h3>
+          <div class="chart-box"><canvas id="chartDaily"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🧱 Categories per month</h3>
+        <div class="chart-box tall"><canvas id="chartStacked"></canvas></div>
+      </div>
+
+      <div class="card">
+        <h3>🗓️ Monthly overview <span id="tableYear"></span> <small class="muted">· 👑 = highest category of the month</small></h3>
+        <div class="table-wrap">
+          <table class="month-table" id="monthTable"></table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🎯 Monthly budgets · <span id="budgetMonth"></span></h3>
+        <p class="muted small-text">Set a monthly budget per category. Bars turn <span class="txt-warn">orange at 80%</span> and <span class="txt-over">red above 100%</span>.</p>
+        <div class="budgets" id="budgets"></div>
+      </div>
+    </section>
+
+    <!-- ===== Tab 3: Income ===== -->
+    <section class="tab-panel" id="tab-income" hidden>
+      <form class="card form-card" id="incomeForm" novalidate>
+        <h2 id="incFormTitle">➕ Add income</h2>
+        <div class="form-grid">
+          <label>Date
+            <input type="date" id="incDate" required>
+          </label>
+          <label>Category
+            <input type="text" id="incCategory" list="incCatList" placeholder="Salary, Ko Ko…" autocomplete="off" maxlength="40">
+          </label>
+          <label>Amount (Ks)
+            <input type="number" id="incAmount" min="1" step="1" inputmode="numeric" placeholder="0">
+          </label>
+          <label class="grow">Description
+            <input type="text" id="incDesc" placeholder="optional" maxlength="120">
+          </label>
+          <div class="form-buttons">
+            <button type="submit" class="btn primary" id="incSubmit">➕ Add</button>
+            <button type="button" class="btn ghost" id="incCancel" hidden>Cancel</button>
+          </div>
+        </div>
+        <p class="form-error" id="incError" role="alert"></p>
+      </form>
+      <datalist id="incCatList"></datalist>
+
+      <div class="card">
+        <h3>📅 Monthly totals <small class="muted">· tap a month to filter</small></h3>
+        <div class="month-chips" id="incMonths"></div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <input type="month" id="incMonth" title="Filter by month">
+          <button type="button" class="btn ghost small" id="incAllMonths">All months</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="incTable">
+            <thead><tr><th>Date</th><th>Category</th><th>Description</th><th class="num">Amount (Ks)</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="incTotalLabel"></span>
+          <strong id="incTotal"></strong>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">Data is saved in this browser · connect Google Sheets in ⚙️ Settings to sync · make a 💾 backup now and then</footer>
+
+  <!-- Google Sheets sync settings -->
+  <dialog class="dialog" id="settingsDialog">
+    <form id="settingsForm" novalidate>
+      <h3>⚙️ Google Sheets sync</h3>
+      <p class="muted small-text">Paste your Apps Script Web App URL and token. They are saved only in this browser.</p>
+      <label>Web App URL
+        <input type="url" id="setUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Token
+        <span class="pw-wrap">
+          <input type="password" id="setToken" autocomplete="off" spellcheck="false">
+          <button type="button" class="icon-btn" id="toggleToken" title="Show / hide token">👁️</button>
+        </span>
+      </label>
+      <p class="form-error" id="setError" role="alert"></p>
+      <div class="pending-box" id="pendingBox" hidden>
+        <span id="pendingInfo"></span>
+        <button type="button" class="btn ghost small" id="btnDiscardPending">Discard</button>
+      </div>
+      <div class="dlg-buttons">
+        <button type="button" class="btn ghost" id="btnDisconnect">Turn off sync</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" id="setCancel">Cancel</button>
+        <button type="submit" class="btn primary">💾 Save &amp; sync</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirm / message dialog -->
+  <dialog class="dialog" id="dialog">
+    <form method="dialog">
+      <h3 id="dlgTitle"></h3>
+      <div id="dlgMessage" class="dlg-message"></div>
+      <div class="dlg-buttons">
+        <button value="cancel" class="btn ghost" id="dlgCancel">Cancel</button>
+        <button value="ok" class="btn primary" id="dlgOk">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
